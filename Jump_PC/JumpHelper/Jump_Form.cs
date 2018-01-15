@@ -23,11 +23,16 @@ namespace JumpHelper
         int dx = 0;         // 横向坐标差
         int dy = 0;         // 纵向坐标差
 
+        int x_jumped_land;
+        int y_jumped_land;
+        int x_jumped_sp;
+        int y_jumped_sp;
 
-        // ms = scale * d + b
+
+        // ms = k * d + b
         double ms = 0;
-        double scale = 0;    // 1 像素距离 = ？ ms
-        double d = 0;          // 起点 和 终点 间的直线距离
+        double k = 0;       // 1 像素距离 = ？ ms
+        double d = 0;       // 起点 和 终点 间的直线距离
         double b = 0;
         
         // Message to Arduino
@@ -37,31 +42,42 @@ namespace JumpHelper
         int msg_send_time_left = 0;
         string msg_str = "";
 
-        // 扫描端口
-        private void port_scan(SerialPort port, ComboBox combobox)
+        private bool can_i_use_the_port(SerialPort port)
         {
-            // 清除选择列表内容
-            combobox.Items.Clear();
+            bool port_isopen_before_test = port.IsOpen;
 
-            // 获取所有可用端口
-            string[] ValidPort = SerialPort.GetPortNames();
+            try
+            {
+                if(port_isopen_before_test)
+                {
+                    port.Close();
+                    port.Open();
+                }
+                else
+                {
+                    port.Open();
+                    port.Close();
+                }
+            }
+            catch(InvalidOperationException e)
+            {
+                return false;
+            }
 
-            // 如果有可用端口
-            if (ValidPort.Length > 0)
+            return true;
+        }
+
+        // 扫描端口
+        private void port_scan(ComboBox combobox)
+        {
+            combobox.Items.Clear();                         // 清除选择列表内容
+
+            string[] ValidPort = SerialPort.GetPortNames(); // 获取所有可用端口
+
+            if (ValidPort.Length > 0)                       // 如果有可用端口
             {
                 for (int i = 0; i < ValidPort.Length; i++)
                     combobox.Items.Add(ValidPort[i]);
-
-                // 对可选列表进行排序
-
-                // 更新显示内容为第一有效项
-                combobox.Text = combobox.Items[0].ToString();
-
-                // 如果此时已经有端口打开
-                if ((port.IsOpen) && (ValidPort.Contains(port.PortName)))
-                {
-                    combobox.Text = port.PortName;
-                }
             }
             else
             {
@@ -72,25 +88,35 @@ namespace JumpHelper
         // 通过端口名称设置端口
         private void port_set_by_name(SerialPort port, string new_name)
         {
+            bool port_opened_when_change = port.IsOpen;
+
+            // 端口已经打开 要切换到别的端口
             if(port.PortName != new_name)
             {
-                try
+                if(port.IsOpen)
                 {
-                    port.Close();
-                }
-                catch(Exception Err)
-                {
-                    MessageBox.Show(Err.ToString());
+                    try
+                    {
+                        port.Close();   // 尝试关闭当前打开的端口
+                    }
+                    catch (Exception Err)
+                    {
+                        MessageBox.Show(Err.ToString());
+                    }
                 }
 
                 port.PortName = new_name;
-                try
+
+                if(port_opened_when_change)
                 {
-                    port.Open();
-                }
-                catch (Exception Err)
-                {
-                    MessageBox.Show(Err.ToString());
+                    try
+                    {
+                        port.Open();
+                    }
+                    catch (Exception Err)
+                    {
+                        MessageBox.Show(Err.ToString());
+                    }
                 }
             }
         }
@@ -98,7 +124,7 @@ namespace JumpHelper
         // 端口打开、关闭按钮
         private void port_switch_clicked(SerialPort port, Button button, ComboBox combobox)
         {
-            // 若端口已经连接 断开
+            // 端口已打开 关掉
             if(port.IsOpen)
             {
                 try
@@ -112,7 +138,7 @@ namespace JumpHelper
                     MessageBox.Show(Err.ToString());
                 }
             }
-            // 若端口现在连接 断开
+            // 端口已关闭 打开
             else
             {
                 if(port.PortName == combobox.Text)
@@ -131,7 +157,19 @@ namespace JumpHelper
                 }
                 else
                 {
-                    MessageBox.Show("请选择端口", "操作提示");
+                    port_set_by_name(port, combobox.Text);
+
+                    try
+                    {
+                        port.Open();
+                        combobox.Text = port.PortName;
+                        button.Text = "断开";
+                        button.BackColor = Color.OrangeRed;
+                    }
+                    catch (Exception Err)
+                    {
+                        MessageBox.Show("请检查端口", "打开端口失败");
+                    }
                 }
             }
         }
@@ -153,7 +191,7 @@ namespace JumpHelper
             x_st = Control.MousePosition.X;
             y_st = Control.MousePosition.Y;
 
-            textBox_st.Text = "(" + x_st.ToString("D4") + ", " + y_st.ToString("D4") + ")";
+            textBox_st.Text = "(" + x_st.ToString("D4") + "," + y_st.ToString("D4") + ")";
             textBox_st.BackColor = Color.PaleGreen;
         }
 
@@ -165,8 +203,32 @@ namespace JumpHelper
             x_sp = Control.MousePosition.X;
             y_sp = Control.MousePosition.Y;
 
-            textBox_sp.Text = "(" + x_sp.ToString("D4") + ", " + y_sp.ToString("D4") + ")";
+            textBox_sp.Text = "(" + x_sp.ToString("D4") + "," + y_sp.ToString("D4") + ")";
             textBox_sp.BackColor = Color.PaleGreen;
+        }
+
+        // 捕获跳跃后落点坐标
+        private void update_cusor_capture_jumped_land()
+        {
+            checkBox_jumped_land.Checked = true;
+
+            x_jumped_land = Control.MousePosition.X;
+            y_jumped_land = Control.MousePosition.Y;
+
+            textBox_jumped_land.Text = "(" + x_jumped_land.ToString("D4") + "," + y_jumped_land.ToString("D4") + ")";
+            textBox_jumped_land.BackColor = Color.PaleGreen;
+        }
+
+        // 捕获跳跃后目标点坐标
+        private void update_cusor_capture_jumped_sp()
+        {
+            checkBox_jumped_sp.Checked = true;
+
+            x_jumped_sp = Control.MousePosition.X;
+            y_jumped_sp = Control.MousePosition.Y;
+
+            textBox_jumped_sp.Text = "(" + x_jumped_sp.ToString("D4") + "," + y_jumped_sp.ToString("D4") + ")";
+            textBox_jumped_sp.BackColor = Color.PaleGreen;
         }
 
         // 计算起点终点之间距离
@@ -189,9 +251,9 @@ namespace JumpHelper
             }
             else
             {
-                dx = 0;
-                dy = 0;
-                d = 0;
+                //dx = 0;
+                //dy = 0;
+                //d = 0;
             }
 
             d = Math.Sqrt(Math.Pow(dx, 2) + Math.Pow(dy, 2));
@@ -206,17 +268,17 @@ namespace JumpHelper
         {
             double scale_cache;
 
-            if (double.TryParse(textBox_scale.Text, out scale_cache))
+            if (double.TryParse(textBox_k.Text, out scale_cache))
             {
-                scale = scale_cache;
+                k = scale_cache;
             }
             else
             {
-                scale = (float)1.00;
+                k = (float)1.00;
                 MessageBox.Show("请输入[浮点型]数据(已设置为默认值)", "输入错误");
             }
 
-            textBox_scale.Text = scale.ToString("F3");
+            textBox_k.Text = k.ToString("F3");
         }
 
         // 获取输入的偏移量
@@ -240,7 +302,7 @@ namespace JumpHelper
         // 计算触屏时间
         private void update_calculate_ms()
         {
-            ms = d * scale + b;
+            ms = d * k + b;
             textBox_ms.Text = ms.ToString("F3");
         }
 
@@ -261,6 +323,18 @@ namespace JumpHelper
             {
                 msg_send_time_left -= 100;
             }
+
+            double time_ms = (double)(msg_send_time_left / 1000.0);
+
+            if (!(checkBox_st.Checked && checkBox_sp.Checked) || (time_ms<0))
+                groupBox_msg.Text = "...." + " 秒后控制舵机:";
+            else
+                groupBox_msg.Text = time_ms.ToString("F1") + " 秒后控制舵机:";
+        }
+
+        private void solve_k_b()
+        {
+            
         }
 
         // 获取输入的按压角度
@@ -320,11 +394,11 @@ namespace JumpHelper
         // 重置 还有多长时间发出控制命令
         private void ms_to_send_cnt_reset()
         {
-            msg_send_time_left = 500;
+            msg_send_time_left = 1000;
         }
 
         // 发送控制命令
-        private void update_send_msg_to_arduino()
+        private void update_msg_send_out_to_arduino()
         {
             if (checkBox_st.Checked && checkBox_sp.Checked && (msg_send_time_left < 0))
             {
@@ -346,15 +420,19 @@ namespace JumpHelper
                     }
                 }
 
-                textBox_st.Text = "";
-                textBox_sp.Text = "";
-
                 textBox_st.BackColor = Color.PaleTurquoise;
                 textBox_sp.BackColor = Color.PaleTurquoise;
                 textBox_msg_ms.BackColor = Color.PaleTurquoise;
 
                 checkBox_st.Checked = false;
                 checkBox_sp.Checked = false;
+
+                // findme
+                textBox_jumped_land.BackColor = Color.PaleTurquoise;
+                textBox_jumped_sp.BackColor = Color.PaleTurquoise;
+
+                checkBox_jumped_land.Checked = false;
+                checkBox_jumped_sp.Checked = false;
             }
         }
 
@@ -367,7 +445,7 @@ namespace JumpHelper
         // 主窗口 加载
         private void Form_JumpHelper_Load(object sender, EventArgs e)
         {
-            port_scan(serialPort_jump, comboBox_port);
+            port_scan(comboBox_port);
 
             update_input_scale();
             update_input_b();
@@ -386,14 +464,13 @@ namespace JumpHelper
             update_calculate_ms();
             update_msg_ms();
             update_msg_send_time_left();
-
-            update_send_msg_to_arduino();
+            update_msg_send_out_to_arduino();
         }
 
         // 鼠标点下端口选择控件瞬间 更新可用端口列表
         private void comboBox_port_MouseDown(object sender, MouseEventArgs e)
         {
-            port_scan(serialPort_jump, comboBox_port);
+            port_scan(comboBox_port);
         }
 
         // 通过端口名 切换端口
@@ -418,11 +495,22 @@ namespace JumpHelper
 
                 e.Handled = true;
             }
-
-            if (e.KeyCode == Keys.Right)
+            else if (e.KeyCode == Keys.Right)
             {
                 ms_to_send_cnt_reset();
                 update_cusor_capture_stop();
+
+                e.Handled = true;
+            }
+            else if (e.KeyCode == Keys.Down)
+            {
+                update_cusor_capture_jumped_land();
+
+                e.Handled = true;
+            }
+            else if (e.KeyCode == Keys.Up)
+            {
+                update_cusor_capture_jumped_sp();
 
                 e.Handled = true;
             }
