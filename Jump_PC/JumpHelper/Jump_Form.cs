@@ -10,6 +10,9 @@ using System.Windows.Forms;
 
 using System.IO.Ports;
 
+using System.Runtime.InteropServices;
+using System.Reflection;
+
 namespace JumpHelper
 {
     public partial class Form_JumpHelper : Form
@@ -264,13 +267,13 @@ namespace JumpHelper
         }
 
         // 获取输入的比例系数
-        private void update_input_scale()
+        private void update_input_k()
         {
-            double scale_cache;
+            double k_cache;
 
-            if (double.TryParse(textBox_k.Text, out scale_cache))
+            if (double.TryParse(textBox_k.Text, out k_cache))
             {
-                k = scale_cache;
+                k = k_cache;
             }
             else
             {
@@ -427,7 +430,6 @@ namespace JumpHelper
                 checkBox_st.Checked = false;
                 checkBox_sp.Checked = false;
 
-                // findme
                 textBox_jumped_land.BackColor = Color.PaleTurquoise;
                 textBox_jumped_sp.BackColor = Color.PaleTurquoise;
 
@@ -447,7 +449,7 @@ namespace JumpHelper
         {
             port_scan(comboBox_port);
 
-            update_input_scale();
+            update_input_k();
             update_input_b();
             update_input_angle_press();
             update_input_msg_ms();
@@ -520,7 +522,7 @@ namespace JumpHelper
         {
             if(Keys.Enter == e.KeyCode)
             {
-                update_input_scale();
+                update_input_k();
                 e.Handled = true;
             }
         }
